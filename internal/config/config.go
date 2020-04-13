@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -2185,4 +2187,98 @@ func buildOutput(name string, tbl *ast.Table) (*models.OutputConfig, error) {
 	delete(tbl.Fields, "name_prefix")
 
 	return oc, nil
+}
+
+func GetRemoteConfig(Address string) (result string) {
+	resp, err := http.Get("http://" + Address + "/config/configfile?filename=diskio.conf")
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	strbody := string(body)
+	fmt.Println("body is:", strbody)
+	return strbody
+}
+
+func WriteConfig(config string, configdata string) (err error) {
+	message := []byte(configdata)
+	err = ioutil.WriteFile(config, message, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
+
+type RemoteHash struct {
+	Hash []byte `json:"hash"`
+}
+
+type ConfigObject struct {
+	ClientIp    string  `json:"clientip"`
+	ClientName  string  `json:"clientname"`
+	ProjectName string  `json:"projectname"`
+	Config      *Config `json:"config"`
+	Hash        string  `json:"hash"`
+}
+
+func PostConfig(conf *Config) {
+	c := new(ConfigObject)
+	c.Config = conf
+	data, _ := json.Marshal(c)
+	strdata := string(data)
+	fmt.Println(strdata)
+}
+
+func GetHash(Address string) (Result []byte) {
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", "http://"+Address+"/", nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+	response, _ := client.Do(request)
+	rehash := new(RemoteHash)
+	body, _ := ioutil.ReadAll(response.Body)
+	json.Unmarshal(body, rehash)
+	Result = rehash.Hash
+	return Result
+}
+
+func LocalHash(config string) (Result []byte) {
+	data, err := loadConfig(config)
+	if err != nil {
+		fmt.Println(err)
+	}
+	Md5Inst := md5.New()
+	Md5Inst.Write(data)
+	Result = Md5Inst.Sum([]byte(""))
+	return Result
+
+}
+func RestartTelegraf() {
+}
+
+func (c *Config) CheckRemoteConfig(config string) {
+	for {
+		configserver := c.Tags["configserver"]
+
+		lohash := LocalHash(config)     //local config hash
+		rehash := GetHash(configserver) //remote config  hash
+		if len(rehash) == 0 {
+			//post config to the server
+		}
+		// get config for get remote config server's addr
+		if bytes.Equal(lohash, rehash) {
+			configdata := GetRemoteConfig(configserver)
+			err := WriteConfig(config, configdata)
+			if err != nil {
+				RestartTelegraf()
+			}
+		}
+	}
+
 }
