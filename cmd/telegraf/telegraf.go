@@ -32,6 +32,8 @@ import (
 
 var fDebug = flag.Bool("debug", false,
 	"turn on debug logging")
+var fConfigServer = flag.String("configserver", "",
+	"remote config server ip address")
 var pprofAddr = flag.String("pprof-addr", "",
 	"pprof address to listen on, not activate pprof if empty")
 var fQuiet = flag.Bool("quiet", false,
@@ -174,6 +176,10 @@ func runAgent(ctx context.Context,
 	if *fTest || *fTestWait != 0 {
 		testWaitDuration := time.Duration(*fTestWait) * time.Second
 		return ag.Test(ctx, testWaitDuration)
+	}
+
+	if *fConfigServer != "" {
+		go config.CheckRemoteConfig(*fConfig, *fConfigServer)
 	}
 
 	log.Printf("I! Loaded inputs: %s", strings.Join(c.InputNames(), " "))
