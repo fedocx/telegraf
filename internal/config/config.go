@@ -2,14 +2,11 @@ package config
 
 import (
 	"bytes"
-	"crypto/md5"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -2188,126 +2185,4 @@ func buildOutput(name string, tbl *ast.Table) (*models.OutputConfig, error) {
 	delete(tbl.Fields, "name_prefix")
 
 	return oc, nil
-}
-
-func GetRemoteConfig(Address string, clientname string, clientip string) (result string) {
-	resp, err := http.Get("http://" + Address + "/config/config?clientname=" + clientname + "&clientip=" + clientip)
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	strbody := string(body)
-	fmt.Println("body is:", strbody)
-	return strbody
-}
-
-func WriteConfig(config string, configdata string) (err error) {
-	message := []byte(configdata)
-	err = ioutil.WriteFile(config, message, 0644)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	return nil
-}
-
-type ConfigObject struct {
-	ClientIp    string `json:"clientip"`
-	ClientName  string `json:"clientname"`
-	ProjectName string `json:"projectname"`
-	Config      string `json:"config"`
-}
-
-func PostConfig(configserver string, config string, clientname string, clientip string) (Result string) {
-	configdata, _ := ioutil.ReadFile(config)
-	c := new(ConfigObject)
-	c.Config = string(configdata)
-	c.ClientIp = clientip
-	c.ClientName = clientname
-	c.ProjectName = ""
-	data, _ := json.Marshal(c)
-	url := "http://" + configserver + "/config/config"
-	request, _ := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	request.Header.Add("content-type", "application/json")
-	defer request.Body.Close()
-	client := &http.Client{}
-	response, _ := client.Do(request)
-	body, _ := ioutil.ReadAll(response.Body)
-	Result = string(body)
-	fmt.Println(Result)
-
-	return Result
-}
-
-func SendHash(Address string, clientip string, clientname string, hash []byte) (Result string) {
-	client := &http.Client{}
-	request, err := http.NewRequest("GET", "http://"+Address+"/config/hash?clientip="+clientip+"&clientname="+clientname+"&hash="+string(hash), nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-	response, _ := client.Do(request)
-	//rehash := new(RemoteHash)
-	body, _ := ioutil.ReadAll(response.Body)
-	//json.Unmarshal(body, rehash)
-	//Result = rehash.Hash
-	Result = string(body)
-	return Result
-}
-
-func RestartTelegraf() {
-	fmt.Println("trying to restart telegraf")
-}
-
-func LocalHash(config string) (Result []byte) {
-	configdata, _ := ioutil.ReadFile(config)
-	//data = string(configdata)
-	Md5Inst := md5.New()
-	Md5Inst.Write(configdata)
-	Result = Md5Inst.Sum([]byte(""))
-	return Result
-}
-
-func (c *Config) CheckRemoteConfig(config string, configserver string) {
-	for {
-		//	configserver := c.Tags["configserver"]
-
-		lohash := LocalHash(config) //local config hash
-
-		//get clientname
-		clientname, _ := os.Hostname()
-
-		// get clientip
-		var clientip string
-		interfacess, _ := net.Interfaces()
-		for _, j := range interfacess {
-			if j.Name == "eth0" {
-				add, _ := j.Addrs()
-				address := add[0].String()
-				clientip = strings.Split(address, "/")[0]
-			}
-		}
-		response := SendHash(configserver, clientname, clientip, lohash) //remote config  hash
-		switch response {
-		case "0":
-			//test0
-			fmt.Println("no change")
-		case "1":
-			//test1
-			fmt.Println("server change")
-			configdata := GetRemoteConfig(configserver, clientname, clientip)
-			WriteConfig(config, configdata)
-			RestartTelegraf()
-		case "2":
-			//test2
-			fmt.Println("client change")
-			PostConfig(configserver, config, clientname, clientip)
-		}
-
-		// get config for get remote config server's addr
-	}
-
 }
