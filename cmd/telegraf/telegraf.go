@@ -38,8 +38,7 @@ import (
 
 var fDebug = flag.Bool("debug", false,
 	"turn on debug logging")
-var fConfigServer = flag.String("configserver", "",
-	"remote config server ip address")
+var fConfigServer = flag.String("configserver", "", "remote config server ip address")
 var pprofAddr = flag.String("pprof-addr", "",
 	"pprof address to listen on, not activate pprof if empty")
 var fQuiet = flag.Bool("quiet", false,
@@ -116,7 +115,7 @@ func reloadLoop(
 			}
 		}()
 
-		err := runAgent(ctx, inputFilters, outputFilters)
+		err := runAgent(ctx, inputFilters, outputFilters, signals)
 		if err != nil && err != context.Canceled {
 			log.Fatalf("E! [telegraf] Error running agent: %v", err)
 		}
@@ -126,6 +125,7 @@ func reloadLoop(
 func runAgent(ctx context.Context,
 	inputFilters []string,
 	outputFilters []string,
+	signals chan<- os.Signal,
 ) error {
 	log.Printf("I! Starting Telegraf %s", version)
 
@@ -185,7 +185,7 @@ func runAgent(ctx context.Context,
 	}
 
 	if *fConfigServer != "" {
-		go CheckRemoteConfig(*fConfig, *fConfigServer)
+		go CheckRemoteConfig(*fConfig, *fConfigServer, signals)
 	}
 
 	log.Printf("I! Loaded inputs: %s", strings.Join(c.InputNames(), " "))
@@ -558,8 +558,9 @@ func SendHash(Address string, clientip string, clientname string, hash []byte) (
 	return Result
 }
 
-func RestartTelegraf() {
+func RestartTelegraf(signals chan<- os.Signal) {
 	fmt.Println("trying to restart telegraf")
+	signals <- syscall.SIGHUP
 }
 
 func LocalHash(config string) (Result []byte) {
@@ -572,7 +573,7 @@ func LocalHash(config string) (Result []byte) {
 	return Result
 }
 
-func CheckRemoteConfig(config string, configserver string) {
+func CheckRemoteConfig(config string, configserver string, signals chan<- os.Signal) {
 	for {
 		//	configserver := c.Tags["configserver"]
 
@@ -601,8 +602,10 @@ func CheckRemoteConfig(config string, configserver string) {
 			//test1
 			fmt.Println("server change")
 			configdata := GetRemoteConfig(configserver, clientname, clientip)
+
+			fmt.Println(configdata)
 			WriteConfig(config, configdata)
-			RestartTelegraf()
+			RestartTelegraf(signals)
 		case "2":
 			//test2
 			fmt.Println("client change")
