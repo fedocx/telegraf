@@ -481,7 +481,6 @@ func GetRemoteConfig(Address string, clientname string, clientip string) (result
 		panic(err)
 	}
 	strbody := string(body)
-	fmt.Println("body is:", strbody)
 	return strbody
 }
 
@@ -525,7 +524,6 @@ func PostConfig(configserver string, config string, clientname string, clientip 
 	response, _ := client.Do(request)
 	body, _ := ioutil.ReadAll(response.Body)
 	Result = string(body)
-	fmt.Println(Result)
 
 	return Result
 }
@@ -602,9 +600,9 @@ func CheckRemoteConfig(config string, configserver string, signals chan<- os.Sig
 			//test1
 			fmt.Println("server change")
 			configdata := GetRemoteConfig(configserver, clientname, clientip)
-
-			fmt.Println(configdata)
+			fmt.Println("write config  to file")
 			WriteConfig(config, configdata)
+			fmt.Println("restart  service")
 			RestartTelegraf(signals)
 		case "2":
 			//test2
